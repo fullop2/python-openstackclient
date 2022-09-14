@@ -15,8 +15,10 @@
 import random
 from unittest import mock
 import uuid
+from random import randrange
 
 from openstack.image.v2 import image
+from openstack.image.v2 import metadef
 from openstack.image.v2 import member
 
 from openstackclient.tests.unit import fakes
@@ -43,6 +45,8 @@ class FakeImagev2Client:
         self.update_member = mock.Mock()
 
         self.remove_tag = mock.Mock()
+
+        self.create_metadata_object = mock.Mock()
 
         self.auth_token = kwargs['token']
         self.management_url = kwargs['endpoint']
@@ -129,3 +133,29 @@ def create_one_image_member(attrs=None):
     image_member_info.update(attrs)
 
     return member.Member(**image_member_info)
+
+
+def create_one_metadata_object(attrs=None):
+    attrs = attrs or {}
+
+    # Set default attribute
+
+    object_info = {
+        'namespace': 'namespace-' + str(uuid.uuid4()),
+        'name': 'object-' + uuid.uuid4().hex,
+        'properties': {
+        }
+    }
+
+    for i in range(randrange(1,3)):
+        property_name = "property-" + uuid.uuid4().hex
+        object_info[property_name] = {
+                "maximum": randrange(51, 100),
+                "minimum": randrange(1, 50),
+                "title": property_name,
+                "type": "integer"
+            }
+    # Overwrite default attributes if there are some attributes set
+    object_info.update(attrs)
+
+    return metadef.Object(**object_info)

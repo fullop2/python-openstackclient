@@ -20,6 +20,7 @@ from base64 import b64encode
 import logging
 import os
 import sys
+import json
 
 from cinderclient import api_versions
 from openstack.image import image_signer
@@ -40,27 +41,22 @@ if os.name == "nt":
 else:
     msvcrt = None
 
+
 def _format_metadata_object(metadata_object, human_readable=False):
     """Format an image to make it more consistent with OSC operations."""
 
     info = {}
     properties = {}
 
-    # the only fields we're not including is "links", "tags" and the properties
     fields_to_show = [
         'name','namespace','properties'
     ]
+    metadata_object = json.loads(metadata_object)
 
-    # TODO(gtema/anybody): actually it should be possible to drop this method,
-    # since SDK already delivers a proper object
-    metadata_object = metadata_object.to_dict(ignore_none=True, original_names=True)
-
-    # split out the usual key and the properties which are top-level
     for key in metadata_object:
         if key in fields_to_show:
             info[key] = metadata_object.get(key)
 
-    # add properties back into the dictionary as a top-level key
     if properties:
         info['properties'] = format_columns.DictColumn(properties)
 
@@ -72,7 +68,6 @@ class CreateMetadataObject(command.ShowOne):
 
     def get_parser(self, prog_name):
         parser = super().get_parser(prog_name)
-        # TODO(bunting): There are additional arguments that v1 supported
 
         parser.add_argument(
             "--name",
@@ -102,11 +97,77 @@ class CreateMetadataObject(command.ShowOne):
             if attr in parsed_args:
                 val = getattr(parsed_args, attr, None)
                 if val:
-                    # Only include a value in kwargs for attributes that
-                    # are actually present on the command line
                     kwargs[attr] = val
 
-
         metadata_object = image_client.create_metadata_object(**kwargs)
-        info = _format_metadata_object(metadata_object)
+        info = _format_metadata_object(metadata_object.text)
+        return zip(*sorted(info.items()))
+
+
+class DeleteMetadataObject(command.Command):
+    _description = _("Create metadata object")
+
+    def get_parser(self, prog_name):
+        parser = super().get_parser(prog_name)
+
+        parser.add_argument(
+            "--name",
+            metavar="<object-name>",
+            help=_("New object name"),
+        )
+        parser.add_argument(
+            "--namespace",
+            metavar="<namespace>",
+            help=_("namespace"),
+        )
+
+        return parser
+
+    def take_action(self, parsed_args):
+        image_client = self.app.client_manager.image
+
+        kwargs = {'allow_duplicates': True}
+        copy_attrs = ('name', 'namespace')
+        for attr in copy_attrs:
+            if attr in parsed_args:
+                val = getattr(parsed_args, attr, None)
+                if val:
+                    kwargs[attr] = val
+
+        metadata_object = image_client.delete_metadata_object(**kwargs)
+
+
+class GetMetadataObject(command.ShowOne):
+    _description = _("Get metadata object")
+
+    def get_parser(self, prog_name):
+        parser = super().get_parser(prog_name)
+
+        parser.add_argument(
+            "name",
+            metavar="<object-name>",
+            help=_("object name"),
+        )
+        parser.add_argument(
+            "namespace",
+            metavar="<namespace>",
+            help=_("namespace"),
+        )
+        common.add_project_domain_option_to_parser(parser)
+
+        return parser
+
+    def take_action(self, parsed_args):
+        image_client = self.app.client_manager.image
+
+        kwargs = {'allow_duplicates': True}
+        copy_attrs = ('name', 'namespace', 'properties')
+        for attr in copy_attrs:
+            if attr in parsed_args:
+                val = getattr(parsed_args, attr, None)
+                if val:
+                    kwargs[attr] = val
+
+        metadata_object = image_client.get_metadata_object(**kwargs)
+        info = _format_metadata_object(metadata_object.text)
         return zip(*sorted(info.items()))
